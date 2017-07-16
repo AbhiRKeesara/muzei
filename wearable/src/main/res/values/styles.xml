@@ -22,4 +22,7 @@
         <item name="android:colorEdgeEffect">#fff</item>
         <item name="android:progressBarStyleLarge">@android:style/Widget.Material.ProgressBar.Large</item>
     </style>
+    <style name="WatchfaceConfigTheme" parent="android:Theme.DeviceDefault">
+        <item name="android:windowBackground">@color/dark_grey</item>
+    </style>
 </resources>
