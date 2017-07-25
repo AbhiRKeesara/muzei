@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <com.google.android.apps.muzei.WatchfacePreference />
+    <SwitchPreference
+        android:id="@+id/date"
+        android:key="showDate"
+        android:title="Show Date" />
+</PreferenceScreen>
