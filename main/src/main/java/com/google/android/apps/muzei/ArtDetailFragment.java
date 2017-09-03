@@ -19,9 +19,11 @@ package com.google.android.apps.muzei;
 import android.arch.lifecycle.Observer;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.res.ResourcesCompat;
@@ -38,7 +40,6 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.apps.muzei.api.MuzeiArtSource;
 import com.google.android.apps.muzei.api.MuzeiContract;
 import com.google.android.apps.muzei.api.UserCommand;
 import com.google.android.apps.muzei.event.ArtDetailOpenedClosedEvent;
@@ -48,7 +49,7 @@ import com.google.android.apps.muzei.event.SwitchingPhotosStateChangedEvent;
 import com.google.android.apps.muzei.event.WallpaperSizeChangedEvent;
 import com.google.android.apps.muzei.room.Artwork;
 import com.google.android.apps.muzei.room.MuzeiDatabase;
-import com.google.android.apps.muzei.room.Source;
+import com.google.android.apps.muzei.room.Provider;
 import com.google.android.apps.muzei.settings.SettingsActivity;
 import com.google.android.apps.muzei.sync.TaskQueueService;
 import com.google.android.apps.muzei.util.AnimatedMuzeiLoadingSpinnerView;
@@ -74,26 +75,37 @@ public class ArtDetailFragment extends Fragment
     private float mWallpaperAspectRatio;
     private float mArtworkAspectRatio;
 
+    private Provider mCurrentProvider;
     public boolean mSupportsNextArtwork = false;
-    private Observer<Source> mSourceObserver = new Observer<Source>() {
+    private Observer<Provider> mProviderObserver = new Observer<Provider>() {
         @Override
-        public void onChanged(@Nullable final Source source) {
+        public void onChanged(@Nullable final Provider provider) {
+            mCurrentProvider = provider;
             // Update overflow and next button
             mOverflowSourceActionMap.clear();
             mOverflowMenu.getMenu().clear();
             mOverflowMenu.inflate(R.menu.muzei_overflow);
-            if (source != null) {
-                mSupportsNextArtwork = source.supportsNextArtwork;
-                List<UserCommand> commands = source.commands;
-                int numSourceActions = Math.min(SOURCE_ACTION_IDS.length,
-                        commands.size());
-                for (int i = 0; i < numSourceActions; i++) {
-                    UserCommand action = commands.get(i);
-                    mOverflowSourceActionMap.put(SOURCE_ACTION_IDS[i], action.getId());
-                    mOverflowMenu.getMenu().add(0, SOURCE_ACTION_IDS[i], 0, action.getTitle());
-                }
+            if (provider != null) {
+                provider.getSupportsNextArtwork(new Provider.SupportNextArtworkCallback() {
+                    @Override
+                    public void onCallback(boolean supportsNextArtwork) {
+                        mSupportsNextArtwork = supportsNextArtwork;
+                        mNextButton.setVisibility(mSupportsNextArtwork && !mArtworkLoading ? View.VISIBLE : View.GONE);
+                    }
+                });
+                provider.getCommands(new Provider.CommandsCallback() {
+                    @Override
+                    public void onCallback(@NonNull final List<UserCommand> commands) {
+                        int numSourceActions = Math.min(SOURCE_ACTION_IDS.length,
+                                commands.size());
+                        for (int i = 0; i < numSourceActions; i++) {
+                            UserCommand action = commands.get(i);
+                            mOverflowSourceActionMap.put(SOURCE_ACTION_IDS[i], action.getId());
+                            mOverflowMenu.getMenu().add(0, SOURCE_ACTION_IDS[i], 0, action.getTitle());
+                        }
+                    }
+                });
             }
-            mNextButton.setVisibility(mSupportsNextArtwork && !mArtworkLoading ? View.VISIBLE : View.GONE);
         }
     };
 
@@ -278,7 +290,7 @@ public class ArtDetailFragment extends Fragment
             public boolean onMenuItemClick(MenuItem menuItem) {
                 int id = mOverflowSourceActionMap.get(menuItem.getItemId());
                 if (id > 0) {
-                    SourceManager.sendAction(getContext(), id);
+                    mCurrentProvider.sendAction(id);
                     return true;
                 }
 
@@ -296,8 +308,7 @@ public class ArtDetailFragment extends Fragment
         mNextButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                SourceManager.sendAction(getContext(),
-                        MuzeiArtSource.BUILTIN_COMMAND_ID_NEXT_ARTWORK);
+                mCurrentProvider.nextArtwork();
                 mNextFakeLoading = true;
                 showNextFakeLoading();
             }
@@ -328,7 +339,8 @@ public class ArtDetailFragment extends Fragment
 
                     @Override
                     public void onLongPress() {
-                        new AppWidgetUpdateTask(getContext(), true).execute();
+                        new AppWidgetUpdateTask(getContext(), true)
+                                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
                     }
                 });
 
@@ -381,7 +393,7 @@ public class ArtDetailFragment extends Fragment
             onEventMainThread(spsce);
         }
         MuzeiDatabase database = MuzeiDatabase.getInstance(getContext());
-        database.sourceDao().getCurrentSource().observe(this, mSourceObserver);
+        database.providerDao().getCurrentProvider(getContext()).observe(this, mProviderObserver);
         database.artworkDao().getCurrentArtwork().observe(this, mArtworkObserver);
     }
 

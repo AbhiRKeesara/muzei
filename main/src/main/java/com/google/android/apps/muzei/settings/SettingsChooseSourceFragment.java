@@ -44,6 +44,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.res.ResourcesCompat;
@@ -56,7 +57,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
-import com.google.android.apps.muzei.SourceManager;
+import com.google.android.apps.muzei.room.Provider;
 import com.google.android.apps.muzei.api.MuzeiArtSource;
 import com.google.android.apps.muzei.room.MuzeiDatabase;
 import com.google.android.apps.muzei.util.CheatSheet;
@@ -88,8 +89,8 @@ public class SettingsChooseSourceFragment extends Fragment {
 
     private static final int REQUEST_EXTENSION_SETUP = 1;
 
-    private ComponentName mSelectedSource;
-    private LiveData<com.google.android.apps.muzei.room.Source> mCurrentSourceLiveData;
+    private ComponentName mSelectedProvider;
+    private LiveData<Provider> mCurrentProviderLiveData;
     private List<Source> mSources = new ArrayList<>();
 
     private Handler mHandler = new Handler();
@@ -141,12 +142,12 @@ public class SettingsChooseSourceFragment extends Fragment {
         bundle.putString(FirebaseAnalytics.Param.ITEM_CATEGORY, "sources");
         FirebaseAnalytics.getInstance(getContext()).logEvent(FirebaseAnalytics.Event.VIEW_ITEM_LIST, bundle);
 
-        mCurrentSourceLiveData = MuzeiDatabase.getInstance(context).sourceDao().getCurrentSource();
-        mCurrentSourceLiveData.observe(this,
-                new Observer<com.google.android.apps.muzei.room.Source>() {
+        mCurrentProviderLiveData = MuzeiDatabase.getInstance(context).providerDao().getCurrentProvider(context);
+        mCurrentProviderLiveData.observe(this,
+                new Observer<Provider>() {
                     @Override
-                    public void onChanged(@Nullable final com.google.android.apps.muzei.room.Source source) {
-                        updateSelectedItem(source, true);
+                    public void onChanged(@Nullable final Provider provider) {
+                        updateSelectedItem(provider, true);
                     }
                 });
     }
@@ -254,15 +255,15 @@ public class SettingsChooseSourceFragment extends Fragment {
         getContext().unregisterReceiver(mPackagesChangedReceiver);
     }
 
-    private void updateSelectedItem(com.google.android.apps.muzei.room.Source selectedSource, boolean allowAnimate) {
-        ComponentName previousSelectedSource = mSelectedSource;
-        if (selectedSource != null) {
-            mSelectedSource = selectedSource.componentName;
+    private void updateSelectedItem(Provider selectedProvider, boolean allowAnimate) {
+        ComponentName previousSelectedProvider = mSelectedProvider;
+        if (selectedProvider != null) {
+            mSelectedProvider = selectedProvider.componentName;
         }
-        if (previousSelectedSource != null && previousSelectedSource.equals(mSelectedSource)) {
+        if (previousSelectedProvider != null && previousSelectedProvider.equals(mSelectedProvider)) {
             // Only update status
             for (final Source source : mSources) {
-                if (!source.componentName.equals(mSelectedSource) || source.rootView == null) {
+                if (!source.componentName.equals(mSelectedProvider) || source.rootView == null) {
                     continue;
                 }
                 updateSourceStatusUi(source);
@@ -275,9 +276,9 @@ public class SettingsChooseSourceFragment extends Fragment {
         int index = -1;
         for (final Source source : mSources) {
             ++index;
-            if (source.componentName.equals(previousSelectedSource)) {
+            if (source.componentName.equals(previousSelectedProvider)) {
                 selected = false;
-            } else if (source.componentName.equals(mSelectedSource)) {
+            } else if (source.componentName.equals(mSelectedProvider)) {
                 mSelectedSourceIndex = index;
                 selected = true;
             } else {
@@ -354,7 +355,7 @@ public class SettingsChooseSourceFragment extends Fragment {
     }
 
     public void updateSources() {
-        mSelectedSource = null;
+        mSelectedProvider = null;
         Intent queryIntent = new Intent(ACTION_MUZEI_ART_SOURCE);
         PackageManager pm = getContext().getPackageManager();
         mSources.clear();
@@ -466,7 +467,7 @@ public class SettingsChooseSourceFragment extends Fragment {
             source.selectSourceButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    if (source.componentName.equals(mSelectedSource)) {
+                    if (source.componentName.equals(mSelectedProvider)) {
                         ((Callbacks) getContext()).onRequestCloseActivity();
                     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                             && source.targetSdkVersion >= Build.VERSION_CODES.O) {
@@ -509,7 +510,7 @@ public class SettingsChooseSourceFragment extends Fragment {
                         bundle.putString(FirebaseAnalytics.Param.ITEM_ID, source.componentName.flattenToShortString());
                         bundle.putString(FirebaseAnalytics.Param.CONTENT_TYPE, "sources");
                         FirebaseAnalytics.getInstance(getContext()).logEvent(FirebaseAnalytics.Event.SELECT_CONTENT, bundle);
-                        SourceManager.selectSource(getContext(), source.componentName);
+                        MuzeiDatabase.getInstance(getContext()).selectProvider(source.componentName);
                     }
                 }
             });
@@ -563,7 +564,7 @@ public class SettingsChooseSourceFragment extends Fragment {
             mSourceContainerView.addView(source.rootView);
         }
 
-        updateSelectedItem(mCurrentSourceLiveData.getValue(), false);
+        updateSelectedItem(mCurrentProviderLiveData.getValue(), false);
     }
 
     private void launchSourceSettings(Source source) {
@@ -596,7 +597,7 @@ public class SettingsChooseSourceFragment extends Fragment {
                 bundle.putString(FirebaseAnalytics.Param.ITEM_ID, mCurrentInitialSetupSource.flattenToShortString());
                 bundle.putString(FirebaseAnalytics.Param.CONTENT_TYPE, "sources");
                 FirebaseAnalytics.getInstance(getContext()).logEvent(FirebaseAnalytics.Event.SELECT_CONTENT, bundle);
-                SourceManager.selectSource(getContext(), mCurrentInitialSetupSource);
+                MuzeiDatabase.getInstance(getContext()).selectProvider(mCurrentInitialSetupSource);
             }
 
             mCurrentInitialSetupSource = null;
@@ -610,17 +611,11 @@ public class SettingsChooseSourceFragment extends Fragment {
         if (source.rootView == null) {
             return;
         }
-        final LiveData<com.google.android.apps.muzei.room.Source> sourceLiveData = MuzeiDatabase
-                .getInstance(getContext())
-                .sourceDao()
-                .getSourceByComponentName(source.componentName);
-        sourceLiveData.observeForever(new Observer<com.google.android.apps.muzei.room.Source>() {
+        Provider connection = new Provider(getContext(), source.componentName);
+        connection.getDescription(new Provider.DescriptionCallback() {
             @Override
-            public void onChanged(@Nullable final com.google.android.apps.muzei.room.Source storedSource) {
-                sourceLiveData.removeObserver(this);
-                String description = storedSource != null ? storedSource.description : null;
-                ((TextView) source.rootView.findViewById(R.id.source_status)).setText(
-                        !TextUtils.isEmpty(description) ? description : source.description);
+            public void onCallback(@NonNull final String description) {
+                ((TextView) source.rootView.findViewById(R.id.source_status)).setText(description);
             }
         });
     }

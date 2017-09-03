@@ -32,6 +32,7 @@ import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
@@ -41,15 +42,13 @@ import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.google.android.apps.muzei.api.MuzeiArtSource;
 import com.google.android.apps.muzei.api.MuzeiContract;
 import com.google.android.apps.muzei.api.UserCommand;
 import com.google.android.apps.muzei.event.ArtDetailOpenedClosedEvent;
 import com.google.android.apps.muzei.render.ImageUtil;
 import com.google.android.apps.muzei.room.Artwork;
-import com.google.android.apps.muzei.room.ArtworkSource;
 import com.google.android.apps.muzei.room.MuzeiDatabase;
-import com.google.android.apps.muzei.room.Source;
+import com.google.android.apps.muzei.room.Provider;
 
 import net.nurik.roman.muzei.R;
 
@@ -91,7 +90,7 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
             if (ACTION_MARK_NOTIFICATION_READ.equals(action)) {
                 markNotificationRead(context);
             } else if (ACTION_NEXT_ARTWORK.equals(action)) {
-                SourceManager.sendAction(context, MuzeiArtSource.BUILTIN_COMMAND_ID_NEXT_ARTWORK);
+                Provider.nextArtwork(context);
             } else if (ACTION_USER_COMMAND.equals(action)) {
                 triggerUserCommandFromRemoteInput(context, intent);
             }
@@ -105,19 +104,25 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
         }
         final String selectedCommand = remoteInput.getCharSequence(EXTRA_USER_COMMAND).toString();
         final PendingResult pendingResult = goAsync();
-        final LiveData<Source> sourceLiveData = MuzeiDatabase.getInstance(context).sourceDao().getCurrentSource();
-        sourceLiveData.observeForever(new Observer<Source>() {
+        final LiveData<Provider> providerLiveData = MuzeiDatabase.getInstance(context).providerDao()
+                .getCurrentProvider(context);
+        providerLiveData.observeForever(new Observer<Provider>() {
             @Override
-            public void onChanged(@Nullable final Source selectedSource) {
-                sourceLiveData.removeObserver(this);
-                if (selectedSource != null) {
-                    for (UserCommand action : selectedSource.commands) {
-                        if (TextUtils.equals(selectedCommand, action.getTitle())) {
-                            SourceManager.sendAction(context, action.getId());
-                            break;
+            public void onChanged(@Nullable final Provider provider) {
+                providerLiveData.removeObserver(this);
+                if (provider != null) {
+                    provider.getCommands(new Provider.CommandsCallback() {
+                        @Override
+                        public void onCallback(@NonNull final List<UserCommand> commands) {
+                            for (UserCommand action : commands) {
+                                if (TextUtils.equals(selectedCommand, action.getTitle())) {
+                                    provider.sendAction(action.getId());
+                                    break;
+                                }
+                                pendingResult.finish();
+                            }
                         }
-                        pendingResult.finish();
-                    }
+                    });
                 }
             }
         });
@@ -161,18 +166,18 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
         }
 
         ContentResolver contentResolver = context.getContentResolver();
-        ArtworkSource artworkSource = MuzeiDatabase.getInstance(context)
+        Artwork artwork = MuzeiDatabase.getInstance(context)
                 .artworkDao()
-                .getCurrentArtworkWithSourceBlocking();
-        if (artworkSource == null) {
+                .getCurrentArtworkBlocking();
+        if (artwork == null) {
             return;
         }
 
-        long currentArtworkId = artworkSource.artwork.id;
+        long currentArtworkId = artwork.id;
         long lastReadArtworkId = sp.getLong(PREF_LAST_READ_NOTIFICATION_ARTWORK_ID, -1);
-        String currentImageUri = artworkSource.artwork.imageUri.toString();
+        String currentImageUri = artwork.imageUri.toString();
         String lastReadImageUri = sp.getString(PREF_LAST_READ_NOTIFICATION_ARTWORK_IMAGE_URI, null);
-        String currentToken = artworkSource.artwork.token;
+        String currentToken = artwork.token;
         String lastReadToken = sp.getString(PREF_LAST_READ_NOTIFICATION_ARTWORK_TOKEN, null);
         // We've already dismissed the notification if the IDs match
         boolean previouslyDismissedNotification = lastReadArtworkId == currentArtworkId;
@@ -219,7 +224,7 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
             createNotificationChannel(context);
         }
 
-        String artworkTitle = artworkSource.artwork.title;
+        String artworkTitle = artwork.title;
         String title = TextUtils.isEmpty(artworkTitle)
                 ? context.getString(R.string.app_name)
                 : artworkTitle;
@@ -241,14 +246,15 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
         NotificationCompat.BigPictureStyle style = new NotificationCompat.BigPictureStyle()
                 .bigLargeIcon(null)
                 .setBigContentTitle(title)
-                .setSummaryText(artworkSource.artwork.byline)
+                .setSummaryText(artwork.byline)
                 .bigPicture(background);
         nb.setStyle(style);
 
         NotificationCompat.WearableExtender extender = new NotificationCompat.WearableExtender();
 
         // Support Next Artwork
-        if (artworkSource.supportsNextArtwork) {
+        Provider provider = new Provider(context, artwork.sourceComponentName);
+        if (provider.getSupportsNextArtworkBlocking()) {
             PendingIntent nextPendingIntent = PendingIntent.getBroadcast(context, 0,
                     new Intent(context, NewWallpaperNotificationReceiver.class)
                             .setAction(ACTION_NEXT_ARTWORK),
@@ -266,7 +272,7 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
                     .extend(new NotificationCompat.Action.WearableExtender().setAvailableOffline(false))
                     .build());
         }
-        List<UserCommand> commands = artworkSource.commands;
+        List<UserCommand> commands = provider.getCommandsBlocking();
         // Show custom actions as a selectable list on Android Wear devices
         if (!commands.isEmpty()) {
             String[] actions = new String[commands.size()];
@@ -289,7 +295,7 @@ public class NewWallpaperNotificationReceiver extends BroadcastReceiver {
                     .extend(new NotificationCompat.Action.WearableExtender().setAvailableOffline(false))
                     .build());
         }
-        Intent viewIntent = artworkSource.artwork.viewIntent;
+        Intent viewIntent = artwork.viewIntent;
         if (viewIntent != null) {
             viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
