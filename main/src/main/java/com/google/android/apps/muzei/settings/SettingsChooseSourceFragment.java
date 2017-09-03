@@ -57,9 +57,10 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
-import com.google.android.apps.muzei.room.Provider;
 import com.google.android.apps.muzei.api.MuzeiArtSource;
+import com.google.android.apps.muzei.api.provider.MuzeiArtProvider;
 import com.google.android.apps.muzei.room.MuzeiDatabase;
+import com.google.android.apps.muzei.room.Provider;
 import com.google.android.apps.muzei.util.CheatSheet;
 import com.google.android.apps.muzei.util.ObservableHorizontalScrollView;
 import com.google.android.apps.muzei.util.Scrollbar;
@@ -73,8 +74,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-
-import static com.google.android.apps.muzei.api.MuzeiArtSource.ACTION_MUZEI_ART_SOURCE;
 
 /**
  * Fragment for allowing the user to choose the active source.
@@ -356,42 +355,42 @@ public class SettingsChooseSourceFragment extends Fragment {
 
     public void updateSources() {
         mSelectedProvider = null;
-        Intent queryIntent = new Intent(ACTION_MUZEI_ART_SOURCE);
+        Intent queryIntent = new Intent(MuzeiArtProvider.ACTION_MUZEI_ART_PROVIDER);
         PackageManager pm = getContext().getPackageManager();
         mSources.clear();
-        List<ResolveInfo> resolveInfos = pm.queryIntentServices(queryIntent,
+        List<ResolveInfo> resolveInfos = pm.queryIntentContentProviders(queryIntent,
                 PackageManager.GET_META_DATA);
 
         for (ResolveInfo ri : resolveInfos) {
             Source source = new Source();
             source.label = ri.loadLabel(pm).toString();
             source.icon = new BitmapDrawable(getResources(), generateSourceImage(ri.loadIcon(pm)));
-            source.targetSdkVersion = ri.serviceInfo.applicationInfo.targetSdkVersion;
-            source.componentName = new ComponentName(ri.serviceInfo.packageName,
-                    ri.serviceInfo.name);
-            if (ri.serviceInfo.descriptionRes != 0) {
+            source.targetSdkVersion = ri.providerInfo.applicationInfo.targetSdkVersion;
+            source.componentName = new ComponentName(ri.providerInfo.packageName,
+                    ri.providerInfo.name);
+            if (ri.providerInfo.descriptionRes != 0) {
                 try {
                     Context packageContext = getContext().createPackageContext(
                             source.componentName.getPackageName(), 0);
                     Resources packageRes = packageContext.getResources();
-                    source.description = packageRes.getString(ri.serviceInfo.descriptionRes);
+                    source.description = packageRes.getString(ri.providerInfo.descriptionRes);
                 } catch (PackageManager.NameNotFoundException|Resources.NotFoundException e) {
                     Log.e(TAG, "Can't read package resources for source " + source.componentName);
                 }
             }
-            Bundle metaData = ri.serviceInfo.metaData;
+            Bundle metaData = ri.providerInfo.metaData;
             source.color = Color.WHITE;
             if (metaData != null) {
                 String settingsActivity = metaData.getString("settingsActivity");
                 if (!TextUtils.isEmpty(settingsActivity)) {
                     source.settingsActivity = ComponentName.unflattenFromString(
-                            ri.serviceInfo.packageName + "/" + settingsActivity);
+                            ri.providerInfo.packageName + "/" + settingsActivity);
                 }
 
                 String setupActivity = metaData.getString("setupActivity");
                 if (!TextUtils.isEmpty(setupActivity)) {
                     source.setupActivity = ComponentName.unflattenFromString(
-                            ri.serviceInfo.packageName + "/" + setupActivity);
+                            ri.providerInfo.packageName + "/" + setupActivity);
                 }
 
                 source.color = metaData.getInt("color", source.color);
