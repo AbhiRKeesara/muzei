@@ -570,7 +570,7 @@ public class SettingsChooseSourceFragment extends Fragment {
         try {
             Intent settingsIntent = new Intent()
                     .setComponent(source.settingsActivity)
-                    .putExtra(MuzeiArtSource.EXTRA_FROM_MUZEI_SETTINGS, true);
+                    .putExtra(MuzeiArtProvider.EXTRA_FROM_MUZEI_SETTINGS, true);
             startActivity(settingsIntent);
         } catch (ActivityNotFoundException | SecurityException e) {
             Log.e(TAG, "Can't launch source settings.", e);
@@ -581,7 +581,7 @@ public class SettingsChooseSourceFragment extends Fragment {
         try {
             Intent setupIntent = new Intent()
                     .setComponent(source.setupActivity)
-                    .putExtra(MuzeiArtSource.EXTRA_FROM_MUZEI_SETTINGS, true);
+                    .putExtra(MuzeiArtProvider.EXTRA_FROM_MUZEI_SETTINGS, true);
             startActivityForResult(setupIntent, REQUEST_EXTENSION_SETUP);
         } catch (ActivityNotFoundException | SecurityException e) {
             Log.e(TAG, "Can't launch source setup.", e);
