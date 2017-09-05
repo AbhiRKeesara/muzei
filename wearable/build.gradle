@@ -97,6 +97,7 @@ dependencies {
     implementation "com.google.firebase:firebase-perf:$rootProject.ext.googlePlayServicesVersion"
     // Only use crash reporting in release builds
     releaseImplementation "com.google.firebase:firebase-crash:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.firebase:firebase-jobdispatcher:$rootProject.ext.jobDispatcherVersion"
 
     implementation project(':api')
     implementation project(':android-client-common')

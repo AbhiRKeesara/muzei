@@ -22,6 +22,7 @@ import android.arch.lifecycle.OnLifecycleEvent;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -130,9 +131,16 @@ public class WearableController implements LifecycleObserver {
             Asset asset = Asset.createFromBytes(byteStream.toByteArray());
             PutDataMapRequest dataMapRequest = PutDataMapRequest.create("/artwork");
             Artwork artwork = MuzeiDatabase.getInstance(mContext).artworkDao().getCurrentArtworkBlocking();
-            dataMapRequest.getDataMap().putDataMap("artwork", ArtworkTransfer.toDataMap(artwork));
-            dataMapRequest.getDataMap().putAsset("image", asset);
-            Wearable.DataApi.putDataItem(googleApiClient, dataMapRequest.asPutDataRequest().setUrgent()).await();
+            try (Cursor data = mContext.getContentResolver().query(artwork.imageUri,
+                    null, null, null, null)) {
+                if (data != null && data.moveToNext()) {
+                    DataMap dataMap = ArtworkTransfer.toDataMap(
+                            com.google.android.apps.muzei.api.provider.Artwork.fromCursor(data));
+                    dataMapRequest.getDataMap().putDataMap("artwork", dataMap);
+                    dataMapRequest.getDataMap().putAsset("image", asset);
+                    Wearable.DataApi.putDataItem(googleApiClient, dataMapRequest.asPutDataRequest().setUrgent()).await();
+                }
+            }
         }
         googleApiClient.disconnect();
     }
