@@ -141,7 +141,7 @@ public class SettingsChooseSourceFragment extends Fragment {
         bundle.putString(FirebaseAnalytics.Param.ITEM_CATEGORY, "sources");
         FirebaseAnalytics.getInstance(getContext()).logEvent(FirebaseAnalytics.Event.VIEW_ITEM_LIST, bundle);
 
-        mCurrentProviderLiveData = MuzeiDatabase.getInstance(context).providerDao().getCurrentProvider(context);
+        mCurrentProviderLiveData = MuzeiDatabase.getInstance(context).providerDao().getCurrentProvider();
         mCurrentProviderLiveData.observe(this,
                 new Observer<Provider>() {
                     @Override

@@ -373,7 +373,7 @@ public class ArtDetailFragment extends Fragment
             onEventMainThread(spsce);
         }
         MuzeiDatabase database = MuzeiDatabase.getInstance(getContext());
-        database.providerDao().getCurrentProvider(getContext()).observe(this, mProviderObserver);
+        database.providerDao().getCurrentProvider().observe(this, mProviderObserver);
         database.artworkDao().getCurrentArtwork().observe(this, mArtworkObserver);
     }
 
