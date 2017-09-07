@@ -49,6 +49,7 @@ import com.google.android.apps.muzei.room.Artwork;
 import com.google.android.apps.muzei.room.MuzeiDatabase;
 import com.google.android.apps.muzei.room.Provider;
 import com.google.android.apps.muzei.settings.SettingsActivity;
+import com.google.android.apps.muzei.sync.ProviderManager;
 import com.google.android.apps.muzei.sync.TaskQueueService;
 import com.google.android.apps.muzei.util.AnimatedMuzeiLoadingSpinnerView;
 import com.google.android.apps.muzei.util.CheatSheet;
@@ -71,25 +72,22 @@ public class ArtDetailFragment extends Fragment
     private float mWallpaperAspectRatio;
     private float mArtworkAspectRatio;
 
-    private Provider mCurrentProvider;
     public boolean mSupportsNextArtwork = false;
     private Observer<Provider> mProviderObserver = new Observer<Provider>() {
         @Override
         public void onChanged(@Nullable final Provider provider) {
-            mCurrentProvider = provider;
             // Update overflow and next button
             mOverflowSourceActionMap.clear();
             mOverflowMenu.getMenu().clear();
             mOverflowMenu.inflate(R.menu.muzei_overflow);
-            if (provider != null) {
-                provider.getSupportsNextArtwork(new Provider.SupportNextArtworkCallback() {
-                    @Override
-                    public void onCallback(boolean supportsNextArtwork) {
-                        mSupportsNextArtwork = supportsNextArtwork;
-                        mNextButton.setVisibility(mSupportsNextArtwork && !mArtworkLoading ? View.VISIBLE : View.GONE);
-                    }
-                });
-            }
+            ProviderManager.getInstance(getContext()).getSupportsNextArtwork(
+                    new ProviderManager.SupportNextArtworkCallback() {
+                        @Override
+                        public void onCallback(boolean supportsNextArtwork) {
+                            mSupportsNextArtwork = supportsNextArtwork;
+                            mNextButton.setVisibility(mSupportsNextArtwork && !mArtworkLoading ? View.VISIBLE : View.GONE);
+                        }
+                    });
         }
     };
 
@@ -290,7 +288,7 @@ public class ArtDetailFragment extends Fragment
         mNextButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                mCurrentProvider.nextArtwork();
+                ProviderManager.getInstance(getContext()).nextArtwork();
                 mNextFakeLoading = true;
                 showNextFakeLoading();
             }
