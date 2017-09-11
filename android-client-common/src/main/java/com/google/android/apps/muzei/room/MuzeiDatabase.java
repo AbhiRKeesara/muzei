@@ -196,9 +196,7 @@ public abstract class MuzeiDatabase extends RoomDatabase {
         public void migrate(final SupportSQLiteDatabase database) {
             // Handle Provider
             database.execSQL("CREATE TABLE provider ("
-                    + "componentName TEXT PRIMARY KEY NOT NULL,"
-                    + "maxLoadedArtworkId INTEGER NOT NULL,"
-                    + "recentArtworkIds TEXT NOT NULL)");
+                    + "componentName TEXT PRIMARY KEY NOT NULL)");
 
             // Handle Artwork
             database.execSQL("DROP TABLE artwork");
